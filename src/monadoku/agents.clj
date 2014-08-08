@@ -135,6 +135,11 @@
     (apply-puzzle puzzle grid)
     (and return-grid grid)))
 
+;;; Use the following in the repl to test
+;;; (do-puzzle puzzles/fiendish)
+;;; (do-puzzle puzzles/hardest)
+
+; Hrmm could be useful
 ;(->> (ns-publics 'monadoku.puzzles)
 ;     (map last)
 ;     (map var-get)
