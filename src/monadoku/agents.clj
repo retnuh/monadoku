@@ -1,5 +1,5 @@
-(ns monaduko.agents
-  (:require [monaduko.puzzles :as puzzles])
+(ns monadoku.agents
+  (:require [monadoku.puzzles :as puzzles])
   (:use clojure.test))
 
 (derive ::Cell ::Participant)
@@ -68,7 +68,7 @@
 (defmulti is-value ptype)
 (defmulti is-not-value ptype)
 
-(defmethod is-value ::Cell [{:keys [name containers counter] :as cell} val sender]
+(defmethod is-value ::Cell [{:keys [name containers counter] :as cell} val _sender]
   (debug  name "has been set to value" val)
   (tell-all containers name is-value val)
   (send counter disj (last name))

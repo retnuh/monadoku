@@ -1,4 +1,4 @@
-(ns monaduko.puzzles)
+(ns monadoku.puzzles)
 
 (def easy [7, 0, 0, 0, 8, 9, 0, 0, 0,
            4, 0, 0, 7, 0, 0, 6, 0, 8,
