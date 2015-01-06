@@ -58,26 +58,26 @@
 
 (defn ptype [p & _rest] (first (:name p)))
 
-(defn tell [recpt msg val sender]
+(defn tell! [recpt msg val sender]
   ;(debug sender " telling " (:name @recpt) msg val sender)
   (send recpt msg val sender))
 
-(defn tell-all [recipients sender msg val]
-  (dorun (map #(tell (last %) msg val sender) recipients)))
+(defn tell-all! [recipients sender msg val]
+  (dorun (map #(tell! (last %) msg val sender) recipients)))
 
 (defmulti is-value ptype)
 (defmulti is-not-value ptype)
 
 (defmethod is-value ::Cell [{:keys [name containers counter] :as cell} val _sender]
   (debug  name "has been set to value" val)
-  (tell-all containers name is-value val)
+  (tell-all! containers name is-value val)
   (send counter disj (last name))
   (assoc (dissoc cell :possibilities) :value val))
 
 (defmethod is-not-value ::Cell [{:keys [name containers possibilities] :as cell} val sender]
   (let [remaining (disj possibilities val)]
     (debug name "has been told is-not-value" val remaining (:value cell) "by" sender (keys containers))
-    (tell-all containers name is-not-value val)
+    (tell-all! containers name is-not-value val)
     (if (= (count remaining) 1)
       (is-value cell (first remaining) nil)
       (if (> 1 (count remaining))
@@ -94,7 +94,7 @@
 
 (defmethod is-value ::Container [{:keys [name cells possibleCellsForValue] :as container} val sender]
   (debug name "was told is-value " sender val)
-  (tell-all (dissoc cells sender) name is-not-value val)
+  (tell-all! (dissoc cells sender) name is-not-value val)
   (reduce (fn [c ind]
             (update-in c [:possibleCellsForValue ind] remove-possibility-for-value sender ind name))
           (-> container
@@ -136,11 +136,14 @@
     (and return-grid grid)))
 
 ;;; Use the following in the repl to test
-;;; (do-puzzle puzzles/fiendish)
-;;; (do-puzzle puzzles/hardest)
+(do-puzzle puzzles/fiendish)
+(do-puzzle puzzles/hardest)
+
 
 ; Hrmm could be useful
 ;(->> (ns-publics 'monadoku.puzzles)
 ;     (map last)
 ;     (map var-get)
 ;     (map do-puzzle))
+(Thread/sleep 1000)
+(shutdown-agents)
