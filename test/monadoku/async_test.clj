@@ -1,5 +1,5 @@
 (ns monadoku.async-test
-  (:require [monadoku.async])
+  (:use monadoku.async)
   (:use clojure.test))
 
 (deftest hierarchy-test
@@ -27,14 +27,14 @@
     (is (= 8 (col-for-cell 80))))
   (testing "Boxes"
     (is (= 0 (box-for-cell 0)))
-    (is (= 1 (box-for-cell 3)))
-    (is (= 2 (box-for-cell 6)))
-    (is (= 2 (box-for-cell 8)))
-    (is (= 2 (box-for-cell 26)))
-    (is (= 3 (box-for-cell 27)))
-    (is (= 6 (box-for-cell 72)))
+    (is (= 3 (box-for-cell 3)))
+    (is (= 6 (box-for-cell 6)))
+    (is (= 6 (box-for-cell 8)))
+    (is (= 6 (box-for-cell 26)))
+    (is (= 1 (box-for-cell 27)))
+    (is (= 2 (box-for-cell 72)))
+    (is (= 2 (box-for-cell 64)))
     (is (= 8 (box-for-cell 80))))
-  (testing "Boxes")
   )
 
 

@@ -12,8 +12,15 @@
 
 
 (def ^:dynamic *printer-agent* (agent nil))
-(defn print-agent [_a & more] (apply println more))
-(defn debug [& more] #_(send *printer-agent* print-agent more))
+(defn print-agent [_a fn & more] (apply fn more))
+(defn log [& more] (send *printer-agent* print-agent print more))
+(defn logln [& more] (send *printer-agent* print-agent println more))
+(defn debug [& more] #_(send *printer-agent* print-agent println more))
+
+(defn print-grid [grid]
+  (let [sep (apply str (repeat 17 "-"))
+        grid-lines (apply str (map #(apply println-str %) (partition 9 grid)))]
+    (logln (str sep "\n" grid-lines sep))))
 
 (defn boom [_a err] (debug "boom! " err))
 
@@ -80,7 +87,7 @@
     (tell-all! containers name is-not-value val)
     (if (= (count remaining) 1)
       (is-value cell (first remaining) nil)
-      (if (> 1 (count remaining))
+      (if (> (count remaining) 1)
         (assoc-in cell [:possibilities] remaining)
         cell))))
 
@@ -99,14 +106,9 @@
             (update-in c [:possibleCellsForValue ind] remove-possibility-for-value sender ind name))
           (-> container
               (update-in [:cells] dissoc sender)
-              ;; hmm would have thought this would speed things up, but causes the harder ones (fiendish, hardest) to
-              ;; fail
-              #_(assoc-in [:possibleCellsForValue val] #{})
+              (assoc-in [:possibleCellsForValue val] #{})
               )
-          ;(disj (set
-          (keys possibleCellsForValue)
-          ;   )  val))
-          ))
+          (disj (set (keys possibleCellsForValue)) val)))
 
 (defmethod is-not-value ::Container [container val sender]
   (debug (:name container) "was told is-not-value" sender val)
@@ -120,30 +122,31 @@
                (send (get-in grid [:cells ind]) is-value val nil)))
            puzzle)))
 
-(defn print-grid [grid]
-  (dorun (map #(apply println (map (fn [a] (:value @a)) %)) (partition 9 (:cells grid)))))
+(defn extract-grid [grid]
+  (vec (map (fn [a] (:value @a)) (:cells grid))))
 
-(defn do-puzzle [puzzle & return-grid]
+(defn do-puzzle [puzzle name & return-grid]
   (let [start (System/currentTimeMillis)
         grid (make-grid)]
     (add-watch (:counter grid) :watcher
                (fn [_k _a _os ns]
                  (when (= (count ns) 0)
                    (remove-watch (:counter grid) :watcher)
-                   (println "Total time: " (- (System/currentTimeMillis) start))
-                   (print-grid grid))))
+                   (logln name "Total time: " (- (System/currentTimeMillis) start))
+                   (print-grid (extract-grid grid)))))
     (apply-puzzle puzzle grid)
     (and return-grid grid)))
 
 ;;; Use the following in the repl to test
-(do-puzzle puzzles/fiendish)
-(do-puzzle puzzles/hardest)
+;(do-puzzle puzzles/fiendish)
+;(do-puzzle puzzles/hardest)
 
 
 ; Hrmm could be useful
-;(->> (ns-publics 'monadoku.puzzles)
-;     (map last)
-;     (map var-get)
-;     (map do-puzzle))
-(Thread/sleep 1000)
+(dorun (->> (ns-publics 'monadoku.puzzles)
+            (map last)
+            (map #(vector (var-get %) %))
+            (map #(apply do-puzzle %))))
+
+(Thread/sleep 5000)
 (shutdown-agents)
