@@ -1,4 +1,5 @@
 (ns monadoku.async-test
+  (:require [monadoku.puzzles :as puzzles])
   (:use monadoku.async)
   (:use clojure.test))
 
@@ -37,8 +38,14 @@
     (is (= 8 (box-for-cell 80))))
   )
 
+(deftest grid-predicates-test
+  (is (= false (complete? puzzles/euler-example)))
+  (is (= true (complete? puzzles/euler-example-soln)))
+  (is (= true (correct? puzzles/euler-example-soln)))
+  (is (= false (correct? (vec (repeat 81 1)))))
+  )
 
-;; these tests are clearly incomplete! haven't come up with good way to
-;; get results from final agent, not sure if it's worth the effort
+(deftest euler-example-test
+  (is (= puzzles/euler-example-soln (do-puzzle puzzles/euler-example "euler-example"))))
 
 (run-tests)
