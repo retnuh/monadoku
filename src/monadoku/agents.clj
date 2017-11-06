@@ -49,9 +49,11 @@
 
 (defn boom [_a err] (logln "boom! " err))
 
-(defn make-cell [index counter] (agent {:name [::Cell index] :possibilities (set (range 1 10)) :counter counter} :error-handler boom ))
+(defn make-cell [index counter] (agent {:name [::Cell index] :possibilities (set (range 1 10)) :counter counter}
+                                       :error-handler boom ))
 (defn make-container [ptype index] (agent {:name [ptype index]
-                                           :possibleCellsForValue (apply hash-map (interleave (range 1 10) (repeat #{})))}
+                                           :possibleCellsForValue (apply hash-map (interleave (range 1 10)
+                                                                                              (repeat #{})))}
                                           :error-handler boom))
 
 (defn add-container [cell container-agent]
@@ -96,15 +98,15 @@
 (defmulti is-value ptype)
 (defmulti is-not-value ptype)
 
-(defmethod is-value ::Cell [{:keys [name containers counter] :as cell} val _sender]
-  (debug  name "has been set to value" val)
+(defmethod is-value ::Cell [{:keys [name containers counter] :as cell} val sender]
+  (debug name "has been set to value" val "by" sender)
   (tell-all! containers name is-value val)
   (send counter disj (last name))
   (assoc (dissoc cell :possibilities) :value val))
 
 (defmethod is-not-value ::Cell [{:keys [name containers possibilities] :as cell} val sender]
   (let [remaining (disj possibilities val)]
-    (debug name "has been told is-not-value" val remaining (:value cell) "by" sender (keys containers))
+    (debug name "has been told is-not-value" val remaining "by" sender (keys containers))
     (tell-all! containers name is-not-value val)
     (if (= (count remaining) 1)
       (is-value cell (first remaining) nil)
@@ -117,7 +119,7 @@
     (debug container-name "removing" cell "as possibility for" val (count updated) (map #(:name @%) updated))
     (when (= (count updated) 1)
       (debug container-name "noticed" (:name @(first updated)) "only candidate for" val)
-      (send (first updated) is-value val nil))
+      (tell! (first updated) is-value val container-name))
     updated))
 
 (defmethod is-value ::Container [{:keys [name cells possibleCellsForValue] :as container} val sender]
