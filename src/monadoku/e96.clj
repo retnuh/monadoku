@@ -6,7 +6,7 @@
 
 
 (defn- slurp-puzzles []
-  (let [all (slurp "p096_sudoku.txt")
+  (let [all (slurp (clojure.java.io/reader (clojure.java.io/resource "p096_sudoku.txt")))
         raw-puzzles (re-seq #"Grid\s+\d+\n((?:\d{9}\n){9})" all)
         puzzles (vec (map raw-puzzle-to-vec raw-puzzles))]
     puzzles))
