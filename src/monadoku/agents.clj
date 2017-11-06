@@ -1,5 +1,6 @@
 (ns monadoku.agents
-  (:require [monadoku.puzzles :as puzzles])
+  (:require [monadoku.puzzles :as puzzles]
+            [clojure.core.async :as async])
   (:use clojure.test))
 
 (derive ::Cell ::Participant)
@@ -9,6 +10,30 @@
 (derive ::Row ::Container)
 (derive ::Column ::Container)
 (derive ::Box ::Container)
+
+(defn partition-rows [col]
+  (partition 9 col))
+
+(defn partition-cols [col]
+  (apply map vector (partition 9 col)))
+
+(defn partition-boxes [col]
+  (->> (partition 3 col)
+       (partition 3)
+       (apply interleave)
+       (partition 3)
+       (map flatten)))
+
+(defn complete? [grid]
+  (not-any? zero? grid))
+
+(defn correct-container? [container]
+  (= (set (range 1 10)) (set container)))
+
+(defn correct? [grid]
+  (and (every? correct-container? (partition-rows grid))
+       (every? correct-container? (partition-cols grid))
+       (every? correct-container? (partition-boxes grid))))
 
 
 (def ^:dynamic *printer-agent* (agent nil))
@@ -22,7 +47,7 @@
         grid-lines (apply str (map #(apply println-str %) (partition 9 grid)))]
     (logln (str sep "\n" grid-lines sep))))
 
-(defn boom [_a err] (debug "boom! " err))
+(defn boom [_a err] (logln "boom! " err))
 
 (defn make-cell [index counter] (agent {:name [::Cell index] :possibilities (set (range 1 10)) :counter counter} :error-handler boom ))
 (defn make-container [ptype index] (agent {:name [ptype index]
@@ -52,13 +77,9 @@
         rows (vec (map #(make-container ::Row %) (range 9)))
         cols (vec (map #(make-container ::Column %) (range 9)))
         boxes (vec (map #(make-container ::Box %) (range 9)))]
-    (dorun (map bind-cells rows (partition 9 cells)))
-    (dorun (map bind-cells cols (apply map vector (partition 9 cells))))
-    (dorun (map bind-cells boxes (->> (partition 3 cells)
-                               (partition 3)
-                               (apply interleave)
-                               (partition 3)
-                               (map flatten))))
+    (dorun (map bind-cells rows (partition-rows cells)))
+    (dorun (map bind-cells cols (partition-cols cells)))
+    (dorun (map bind-cells boxes (partition-boxes cells)))
     {:name [::Grid 0] :cells cells :rows rows :cols cols :boxes boxes :counter counter}
     ))
 
@@ -125,28 +146,39 @@
 (defn extract-grid [grid]
   (vec (map (fn [a] (:value @a)) (:cells grid))))
 
-(defn do-puzzle [puzzle name & return-grid]
+
+;; We use the blocking functionality core.async here to get the final
+;; answer back, to allow us to test things properly
+(defn do-puzzle [puzzle name & [print?]]
   (let [start (System/currentTimeMillis)
-        grid (make-grid)]
+        grid (make-grid)
+        complete (async/chan 1)]
     (add-watch (:counter grid) :watcher
                (fn [_k _a _os ns]
                  (when (= (count ns) 0)
                    (remove-watch (:counter grid) :watcher)
-                   (logln name "Total time: " (- (System/currentTimeMillis) start))
-                   (print-grid (extract-grid grid)))))
+                   (async/>!! complete (extract-grid grid))
+                   (async/close! complete)
+                   )))
     (apply-puzzle puzzle grid)
-    (and return-grid grid)))
+    (async/alt!!
+      (async/timeout 10000) ([v c] (logln name "Timed out" c v) nil)
+      complete  ([r _]
+                 (when print?
+                   (logln name "Total time: " (- (System/currentTimeMillis) start))
+                   (print-grid r))
+                 r))))
 
 ;;; Use the following in the repl to test
-;(do-puzzle puzzles/fiendish)
-;(do-puzzle puzzles/hardest)
+;(do-puzzle puzzles/fiendish "fiendish" true)
+;(do-puzzle puzzles/hardest "hardest" true)
+;(do-puzzle puzzles/easy "easy" true)
+;(do-puzzle puzzles/mild "mild" true)
 
 
 ; Hrmm could be useful
-(dorun (->> (ns-publics 'monadoku.puzzles)
+#_(dorun (->> (ns-publics 'monadoku.puzzles)
             (map last)
             (map #(vector (var-get %) %))
             (map #(apply do-puzzle %))))
 
-(Thread/sleep 5000)
-(shutdown-agents)

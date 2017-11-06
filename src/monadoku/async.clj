@@ -310,15 +310,16 @@
         (tell! publisher [::Cell ind] is-value val nil))
       (recur (inc ind) (rest puzzle)))))
 
-(defn do-puzzle [puzzle name]
+(defn do-puzzle [puzzle name & [print?]]
   (let [start (System/currentTimeMillis)
         [publisher result] (make-grid)]
     (apply-puzzle puzzle publisher)
     (alt!!
       (timeout 10000) ([v c] (warnln name "Timed out" c v) nil)
       result ([r _]
-               (warnln name "Total time: " (- (System/currentTimeMillis) start))
-               (print-grid r)
+              (when print?
+                (warnln name "Total time: " (- (System/currentTimeMillis) start))
+                (print-grid r))
                r))))
 
 
