@@ -44,7 +44,7 @@
 
 (defn print-grid [grid]
   (let [sep (apply str (repeat 17 "-"))
-        grid-lines (apply str (map #(apply println-str %) (partition 9 grid)))]
+        grid-lines (apply str (map #(apply println-str %) (partition 9 (map #(or % 0) grid))))]
     (logln (str sep "\n" grid-lines sep))))
 
 (defn boom [_a err] (logln "boom! " err))
@@ -162,7 +162,11 @@
                    )))
     (apply-puzzle puzzle grid)
     (async/alt!!
-      (async/timeout 10000) ([v c] (logln name "Timed out" c v) nil)
+      (async/timeout 10000) ([v c]
+                             (when print?
+                               (logln name "Timed out" c v)
+                               (print-grid (extract-grid grid)))
+                             nil)
       complete  ([r _]
                  (when print?
                    (logln name "Total time: " (- (System/currentTimeMillis) start))
