@@ -129,7 +129,7 @@
             (update-in c [:possibleCellsForValue ind] remove-possibility-for-value sender ind name))
           (-> container
               (update-in [:cells] dissoc sender)
-              (assoc-in [:possibleCellsForValue val] #{})
+              (update-in [:possibleCellsForValue] dissoc val)
               )
           (disj (set (keys possibleCellsForValue)) val)))
 
