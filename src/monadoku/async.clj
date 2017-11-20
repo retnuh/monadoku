@@ -1,17 +1,7 @@
 (ns monadoku.async
   (:require [monadoku.puzzles :as puzzles]
             [clojure.core.async :refer [chan <! >! >!! alt!! alt! timeout pub sub unsub mult tap go go-loop close! sliding-buffer]])
-  (:use clojure.test))
-
-(derive ::Cell ::Participant)
-(derive ::Container ::Participant)
-(derive ::Grid ::Participant)
-
-(derive ::Row ::Container)
-(derive ::Column ::Container)
-(derive ::Box ::Container)
-
-(defn ptype [p & _rest] (first (:name p)))
+  (:use clojure.test monadoku.common))
 
 
 (def ^:dynamic *printer-chan* (chan 5000))
@@ -39,48 +29,6 @@
     (logln (str sep "\n" grid-lines sep))))
 
 
-(defn row-for-cell [cell]
-  (quot cell 9))
-
-
-(defn col-for-cell [cell]
-  (mod cell 9))
-
-
-(defn box-for-cell [cell]
-  (+ (quot cell 27) (* 3 (quot (mod cell 9) 3))))
-
-
-(defn partition-rows [col]
-  (partition 9 col))
-
-
-(defn partition-cols [col]
-  (apply map vector (partition 9 col)))
-
-
-(defn partition-boxes [col]
-  (->> (partition 3 col)
-       (partition 3)
-       (apply interleave)
-       (partition 3)
-       (map flatten)))
-
-
-(defn complete? [grid]
-  (not-any? zero? grid))
-
-
-(defn correct-container? [container]
-  (= (set (range 1 10)) (set container)))
-
-
-(defn correct? [grid]
-  (and (every? correct-container? (partition-rows grid))
-       (every? correct-container? (partition-cols grid))
-       (every? correct-container? (partition-boxes grid))))
-
-
 (defn make-channel [] (chan 100))
 
 
@@ -95,10 +43,10 @@
 
 
 (defn make-cell [index grid publisher publication]
-  (let [name [::Cell index]
+  (let [name [:monadoku/Cell index]
         state {:name       name :publisher publisher
                :grid       grid :possibilities (set (range 1 10))
-               :containers [[::Row (row-for-cell index)] [::Column (col-for-cell index)] [::Box (box-for-cell index)]]}]
+               :containers [[:monadoku/Row (row-for-cell index)] [:monadoku/Column (col-for-cell index)] [:monadoku/Box (box-for-cell index)]]}]
     (make-participant state publication)
     name))
 
@@ -141,7 +89,7 @@
         saved (conj stack sans-stack)]
     (assoc sans-stack :stack saved)))
 
-;(defmethod push-state ::Grid [{:keys [publisher cells name rows cols boxes] :as state} _]
+;(defmethod push-state :monadoku/Grid [{:keys [publisher cells name rows cols boxes] :as state} _]
 ;  (tell-all! publisher cells name push-state nil)
 ;  (tell-all! publisher rows name push-state nil)
 ;  (tell-all! publisher cols name push-state nil)
@@ -149,16 +97,16 @@
 ;  (basic-push-state state))
 
 
-(defmethod push-state ::Participant [state _]
+(defmethod push-state :monadoku/Participant [state _]
   (basic-push-state state))
 
 
-(defmethod pop-state ::Participant [{stack :stack name :name} _]
+(defmethod pop-state :monadoku/Participant [{stack :stack name :name} _]
   #_(logln name "has been reset to state" (last stack))
   (assoc (last stack) :stack (pop stack)))
 
 
-(defmethod is-value ::Cell [{:keys [name containers grid publisher] :as cell} {:keys [val sender]}]
+(defmethod is-value :monadoku/Cell [{:keys [name containers grid publisher] :as cell} {:keys [val sender]}]
   (if (:value cell)
     cell
     (do
@@ -169,7 +117,7 @@
     ))
 
 
-(defmethod is-not-value ::Cell [{:keys [name containers possibilities publisher] :as cell} {:keys [val sender]}]
+(defmethod is-not-value :monadoku/Cell [{:keys [name containers possibilities publisher] :as cell} {:keys [val sender]}]
   (if-not (:value cell)
     (let [remaining (disj possibilities val)]
       (debug name "has been told is-not-value" val remaining (count remaining) (:value cell) "by" sender containers)
@@ -204,7 +152,7 @@
     updated))
 
 
-(defmethod is-value ::Container [{:keys [name cells possibleCellsForValue publisher] :as container} {:keys [val sender]}]
+(defmethod is-value :monadoku/Container [{:keys [name cells possibleCellsForValue publisher] :as container} {:keys [val sender]}]
   (debug name "was told is-value " sender val cells)
   (tell-all! publisher (disj cells sender) name is-not-value val)
   (reduce (fn [c ind]
@@ -215,12 +163,12 @@
           (disj (set (keys possibleCellsForValue)) val)))
 
 
-(defmethod is-not-value ::Container [container {:keys [val sender]}]
+(defmethod is-not-value :monadoku/Container [container {:keys [val sender]}]
   (debug (:name container) "was told is-not-value" sender val)
   (update-in container [:possibleCellsForValue val] remove-possibility-for-value sender val container))
 
 
-(defmethod is-value ::Grid [grid {:keys [val sender]}]
+(defmethod is-value :monadoku/Grid [grid {:keys [val sender]}]
   (logln (:name grid) "was told is-value" sender val (:count grid))
   (let [r (assoc-in grid [:grid (last sender)] val)]
     #_(print-grid (:grid r))
@@ -231,13 +179,13 @@
 (defn make-guess [{:keys [cells rows cols boxes publisher name] :as grid-state} grid-vec stack]
   (let [unknown (ffirst (drop-while #(pos? (last %)) (map-indexed vector grid-vec)))
         s (conj stack [unknown 0 grid-vec])]
-    (logln "Pushing state and making guess for" [::Cell unknown] (map butlast s) grid-state)
+    (logln "Pushing state and making guess for" [:monadoku/Cell unknown] (map butlast s) grid-state)
     (tell! publisher name push-state nil nil)
     (tell-all! publisher cells nil push-state nil)
     (tell-all! publisher rows nil push-state nil)
     (tell-all! publisher cols nil push-state nil)
     (tell-all! publisher boxes nil push-state nil)
-    (tell! publisher [::Cell unknown] guess 0 :guess)
+    (tell! publisher [:monadoku/Cell unknown] guess 0 :guess)
     s))
 
 
@@ -253,27 +201,27 @@
   (let [bottom (pop stack)
         [cell poss-index grid-vec] (last stack)
         s (conj bottom [cell (inc poss-index) grid-vec])]
-    (logln "Guessing again" name [::Cell cell] (inc poss-index) (map butlast s) grid-state)
+    (logln "Guessing again" name [:monadoku/Cell cell] (inc poss-index) (map butlast s) grid-state)
     (pop-all grid-state)
     (tell! publisher name push-state nil :guess)
     (tell-all! publisher cells nil push-state nil)
     (tell-all! publisher rows nil push-state nil)
     (tell-all! publisher cols nil push-state nil)
     (tell-all! publisher boxes nil push-state nil)
-    (tell! publisher [::Cell cell] guess (inc poss-index) :guess)
+    (tell! publisher [:monadoku/Cell cell] guess (inc poss-index) :guess)
     s))
 
 
 (defn make-grid []
-  (let [name [::Grid 0]
+  (let [name [:monadoku/Grid 0]
         publisher (chan 81920)
         publisher-mult (mult publisher)
         spigot (tap publisher-mult (chan (sliding-buffer 1)))
         publication (pub (tap publisher-mult (chan 81920)) #(:name %))
         cells (vec (map #(make-cell % name publisher publication) (range 81)))
-        rows (vec (map #(make-container ::Row %1 publisher publication %2) (range 9) (partition-rows cells)))
-        cols (vec (map #(make-container ::Column %1 publisher publication %2) (range 9) (partition-cols cells)))
-        boxes (vec (map #(make-container ::Box %1 publisher publication (map vec (partition 2 %2))) (range 9) (partition-boxes cells)))
+        rows (vec (map #(make-container :monadoku/Row %1 publisher publication %2) (range 9) (partition-rows cells)))
+        cols (vec (map #(make-container :monadoku/Column %1 publisher publication %2) (range 9) (partition-cols cells)))
+        boxes (vec (map #(make-container :monadoku/Box %1 publisher publication (map vec (partition 2 %2))) (range 9) (partition-boxes cells)))
         result (make-channel)
         updates (make-channel)
         grid {:name  name :grid (vec (repeat 81 0)) :updates updates :publisher publisher
@@ -307,7 +255,7 @@
     (when-let [val (first puzzle)]
       (when-not (zero? val)
         (debug "start telling " ind " val is " val)
-        (tell! publisher [::Cell ind] is-value val nil))
+        (tell! publisher [:monadoku/Cell ind] is-value val nil))
       (recur (inc ind) (rest puzzle)))))
 
 (defn do-puzzle [puzzle name & [print?]]

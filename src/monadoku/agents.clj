@@ -1,40 +1,8 @@
 (ns monadoku.agents
   (:require [monadoku.puzzles :as puzzles]
             [clojure.core.async :as async])
+  (:use [monadoku.common])
   (:use clojure.test))
-
-(derive ::Cell ::Participant)
-(derive ::Container ::Participant)
-
-(derive ::Grid ::Container)
-(derive ::Row ::Container)
-(derive ::Column ::Container)
-(derive ::Box ::Container)
-
-(defn partition-rows [col]
-  (partition 9 col))
-
-(defn partition-cols [col]
-  (apply map vector (partition 9 col)))
-
-(defn partition-boxes [col]
-  (->> (partition 3 col)
-       (partition 3)
-       (apply interleave)
-       (partition 3)
-       (map flatten)))
-
-(defn complete? [grid]
-  (not-any? zero? grid))
-
-(defn correct-container? [container]
-  (= (set (range 1 10)) (set container)))
-
-(defn correct? [grid]
-  (and (every? correct-container? (partition-rows grid))
-       (every? correct-container? (partition-cols grid))
-       (every? correct-container? (partition-boxes grid))))
-
 
 (def ^:dynamic *printer-agent* (agent nil))
 (defn print-agent [_a fn & more] (apply fn more))
@@ -49,7 +17,7 @@
 
 (defn boom [_a err] (logln "boom! " err))
 
-(defn make-cell [index counter] (agent {:name [::Cell index] :possibilities (set (range 1 10)) :counter counter}
+(defn make-cell [index counter] (agent {:name [:monadoku/Cell index] :possibilities (set (range 1 10)) :counter counter}
                                        :error-handler boom ))
 (defn make-container [ptype index] (agent {:name [ptype index]
                                            :possibleCellsForValue (apply hash-map (interleave (range 1 10)
@@ -76,17 +44,15 @@
 (defn make-grid []
   (let [counter (agent (set (range 81)))
         cells (vec (map #(make-cell % counter) (range 81)))
-        rows (vec (map #(make-container ::Row %) (range 9)))
-        cols (vec (map #(make-container ::Column %) (range 9)))
-        boxes (vec (map #(make-container ::Box %) (range 9)))]
+        rows (vec (map #(make-container :monadoku/Row %) (range 9)))
+        cols (vec (map #(make-container :monadoku/Column %) (range 9)))
+        boxes (vec (map #(make-container :monadoku/Box %) (range 9)))]
     (dorun (map bind-cells rows (partition-rows cells)))
     (dorun (map bind-cells cols (partition-cols cells)))
     (dorun (map bind-cells boxes (partition-boxes cells)))
-    {:name [::Grid 0] :cells cells :rows rows :cols cols :boxes boxes :counter counter}
+    {:name [:monadoku/Grid 0] :cells cells :rows rows :cols cols :boxes boxes :counter counter}
     ))
 
-
-(defn ptype [p & _rest] (first (:name p)))
 
 (defn tell! [recpt msg val sender]
   ;(debug sender " telling " (:name @recpt) msg val sender)
@@ -98,13 +64,13 @@
 (defmulti is-value ptype)
 (defmulti is-not-value ptype)
 
-(defmethod is-value ::Cell [{:keys [name containers counter] :as cell} val sender]
+(defmethod is-value :monadoku/Cell [{:keys [name containers counter] :as cell} val sender]
   (debug name "has been set to value" val "by" sender)
   (tell-all! containers name is-value val)
   (send counter disj (last name))
   (assoc (dissoc cell :possibilities) :value val))
 
-(defmethod is-not-value ::Cell [{:keys [name containers possibilities] :as cell} val sender]
+(defmethod is-not-value :monadoku/Cell [{:keys [name containers possibilities] :as cell} val sender]
   (let [remaining (disj possibilities val)]
     (debug name "has been told is-not-value" val remaining "by" sender (keys containers))
     (tell-all! containers name is-not-value val)
@@ -122,7 +88,7 @@
       (tell! (first updated) is-value val container-name))
     updated))
 
-(defmethod is-value ::Container [{:keys [name cells possibleCellsForValue] :as container} val sender]
+(defmethod is-value :monadoku/Container [{:keys [name cells possibleCellsForValue] :as container} val sender]
   (debug name "was told is-value " sender val)
   (tell-all! (dissoc cells sender) name is-not-value val)
   (reduce (fn [c ind]
@@ -133,7 +99,7 @@
               )
           (disj (set (keys possibleCellsForValue)) val)))
 
-(defmethod is-not-value ::Container [container val sender]
+(defmethod is-not-value :monadoku/Container [container val sender]
   (debug (:name container) "was told is-not-value" sender val)
   (update-in container [:possibleCellsForValue val] remove-possibility-for-value sender val (:name container)))
 
