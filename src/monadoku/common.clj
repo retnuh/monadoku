@@ -22,7 +22,7 @@
        (map flatten)))
 
 (defn complete? [grid]
-  (not-any? zero? grid))
+  (and (not-any? zero? grid) (= 81 (count grid))))
 
 (defn correct-container? [container]
   (= (set (range 1 10)) (set container)))
@@ -40,6 +40,11 @@
 (defn col-for-cell [cell]
   (mod cell 9))
 
+
+;; Boxes go down rather than across
+;; 0  3  6
+;; 1  4  7
+;; 2  5  8
 
 (defn box-for-cell [cell]
   (+ (quot cell 27) (* 3 (quot (mod cell 9) 3))))
